@@ -1,0 +1,12 @@
+# Ignorar o ambiente virtual
+venv/
+__pycache__/
+
+# Ignorar arquivos de chaves e senhas
+.env
+
+# Ignorar os arquivos de áudio (para não pesar o repositório)
+*.mp3
+*.m4a
+*.wav
+*.ogg
