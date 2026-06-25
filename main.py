@@ -5,11 +5,10 @@ from agno.os import AgentOS
 from agents import agente_suporte
 import services
 
-# 1. Usamos a aplicação nativa do Agno como o "motor" principal
 agent_os = AgentOS(agents=[agente_suporte])
 app = agent_os.get_app()
 
-# 2. Mantemos a liberação de segurança (CORS)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,15 +17,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 3. Modelo de dados esperado do Monitor Plantão
+
 class ChamadaRequest(BaseModel):
     id_chamada: str
+    CodAtendimento: int
+    PAS: int
+    RecordingFile: str
 
-# 4. Nosso ENDPOINT PÚBLICO para os outros sistemas
+
 @app.post("/api/gerar-nota")
 def api_gerar_nota(request: ChamadaRequest):
     try:
-        caminho_audio = services.buscar_audio_no_asterisk(request.id_chamada)
+        caminho_audio = services.buscar_audio_no_asterisk(request.RecordingFile)
         nota_final = services.gerar_nota_de_atendimento(caminho_audio)
         
         return {
