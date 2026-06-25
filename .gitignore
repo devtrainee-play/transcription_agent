@@ -1,13 +1,26 @@
-# Ignorar o ambiente virtual
+# Environments
+.venv/
 venv/
+
+# Python cache
 __pycache__/
+*.py[cod]
 
-# Ignorar arquivos de chaves e senhas
+# Local secrets
 .env
+.env.*
+!.env.example
 
-# Ignorar os arquivos de áudio (para não pesar o repositório)
+# Generated audio and atendimento outputs
+downloads/
+atendimentos/
+
+# Audio files
 *.mp3
 *.m4a
 *.wav
 *.ogg
-.venv
+
+# Logs/temp
+*.log
+*.tmp

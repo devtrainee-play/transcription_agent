@@ -9,6 +9,9 @@ agente_suporte = Agent(
     instructions=[
         "Você receberá a transcrição bruta de uma ligação telefônica com um cliente.",
         "Sua tarefa é limpar os vícios de linguagem, organizar as ideias e gerar uma Nota de Atendimento.",
+        "Não invente informações que não estejam na transcrição.",
+        "Se houver trechos [inaudível] ou informação insuficiente, indique que não foi possível identificar.",
+        "Preserve números, IDs, horários, nomes de sistemas e ações técnicas citadas na transcrição.",
         "Formate a saída rigorosamente com os seguintes tópicos:",
         "1. **Motivo do Contato:** Qual foi o problema ou dúvida relatada?",
         "2. **Sistema Afetado:** Identifique se o problema ocorreu no MAKER, Commercial, Smart Manager, Logger ou outro software.",

@@ -1,12 +1,13 @@
 import os
 import paramiko
+from dotenv import load_dotenv
 
+load_dotenv()
 
-HOST = "192.168.0.2"
-PORT = 22
-
-USER = "root"
-PASSWORD = "#y2#QqiyjG9zjjA"
+HOST = os.getenv("ASTERISK_HOST")
+PORT = int(os.getenv("ASTERISK_PORT", "22"))
+USER = os.getenv("ASTERISK_USER")
+PASSWORD = os.getenv("ASTERISK_PASSWORD")
 
 REMOTE_DIR = "/var/spool/asterisk/monitor/"
 LOCAL_DIR = "./downloads"  # pasta local para salvar os arquivos baixados
@@ -14,6 +15,9 @@ LOCAL_DIR = "./downloads"  # pasta local para salvar os arquivos baixados
 #q-202-5531997336921-20260514-144153-1778780475.370050.wav
 
 def main():
+    if not HOST or not USER or not PASSWORD:
+        raise RuntimeError("Configuração do Asterisk incompleta. Defina ASTERISK_HOST, ASTERISK_USER e ASTERISK_PASSWORD no arquivo .env.")
+
     os.makedirs(LOCAL_DIR, exist_ok=True)
 
     transport = None
