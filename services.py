@@ -2,12 +2,13 @@ import os
 import posixpath
 import re
 import time
+import mimetypes
 from datetime import datetime
 
 import paramiko
+from google.genai import types
 
-from config import cliente_google
-from agents import agente_suporte
+from config import GEMINI_BACKEND, cliente_google
 
 LOCAL_DIR = "./downloads"
 ATENDIMENTOS_DIR = "./atendimentos"
@@ -16,7 +17,9 @@ ASTERISK_PORT = int(os.getenv("ASTERISK_PORT", "22"))
 ASTERISK_USER = os.getenv("ASTERISK_USER")
 ASTERISK_PASSWORD = os.getenv("ASTERISK_PASSWORD")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_TEXT_MODEL = os.getenv("GEMINI_TEXT_MODEL", GEMINI_MODEL)
 GEMINI_MAX_TENTATIVAS = int(os.getenv("GEMINI_MAX_TENTATIVAS", "3"))
+GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "4096"))
 PROMPT_TRANSCRICAO = """
 Você está transcrevendo uma ligação telefônica de suporte técnico em português do Brasil.
 
@@ -29,6 +32,25 @@ Regras obrigatórias:
 - Não resuma. Faça uma transcrição literal.
 - Não corrija tecnicamente o que foi dito.
 - Mantenha a ordem cronológica da conversa.
+""".strip()
+PROMPT_NOTA_ATENDIMENTO = """
+Você é um especialista técnico em suporte a sistemas corporativos e comunicação.
+
+Você receberá a transcrição bruta de uma ligação telefônica com um cliente.
+Sua tarefa é limpar os vícios de linguagem, organizar as ideias e gerar uma Nota de Atendimento.
+
+Regras obrigatórias:
+- Não invente informações que não estejam na transcrição.
+- Se houver trechos [inaudível] ou informação insuficiente, indique que não foi possível identificar.
+- Preserve números, IDs, horários, nomes de sistemas e ações técnicas citadas na transcrição.
+- Formate a saída rigorosamente com os seguintes tópicos:
+1. **Motivo do Contato:** Qual foi o problema ou dúvida relatada?
+2. **Sistema Afetado:** Identifique se o problema ocorreu no MAKER, Commercial, Smart Manager, Logger ou outro software.
+3. **Diagnóstico / Ações Realizadas:** O que foi conversado, analisado ou configurado durante a ligação.
+4. **Próximos Passos:** O que ficou combinado de ser feito.
+
+Transcrição:
+{transcricao}
 """.strip()
 
 class GeminiQuotaExceeded(Exception):
@@ -120,6 +142,22 @@ def buscar_audio_no_asterisk(recording_file: str) -> str:
         print("[SFTP] Conexão encerrada.", flush=True)
 
 
+def _mime_type_audio(caminho_do_audio: str) -> str:
+    mime_type, _ = mimetypes.guess_type(caminho_do_audio)
+    return mime_type or "audio/wav"
+
+
+def _conteudo_audio(caminho_do_audio: str):
+    if GEMINI_BACKEND == "vertex":
+        with open(caminho_do_audio, "rb") as audio:
+            return types.Part.from_bytes(
+                data=audio.read(),
+                mime_type=_mime_type_audio(caminho_do_audio),
+            )
+
+    return cliente_google.files.upload(file=caminho_do_audio)
+
+
 def gerar_nota_de_atendimento(caminho_do_audio: str) -> tuple[str, str]:
    
     print(f"[IA] Arquivo que será enviado ao Gemini: {os.path.abspath(caminho_do_audio)}", flush=True)
@@ -130,13 +168,16 @@ def gerar_nota_de_atendimento(caminho_do_audio: str) -> tuple[str, str]:
 
     for tentativa in range(1, GEMINI_MAX_TENTATIVAS + 1):
         try:
-            print(f"[IA] Tentativa {tentativa}/{GEMINI_MAX_TENTATIVAS}: upload do áudio...", flush=True)
-            arquivo_audio = cliente_google.files.upload(file=caminho_do_audio)
+            print(f"[IA] Tentativa {tentativa}/{GEMINI_MAX_TENTATIVAS}: preparando áudio...", flush=True)
+            arquivo_audio = _conteudo_audio(caminho_do_audio)
             print(f"[IA] Tentativa {tentativa}/{GEMINI_MAX_TENTATIVAS}: solicitando transcrição no modelo {GEMINI_MODEL}...", flush=True)
 
             resposta_transcricao = cliente_google.models.generate_content(
                 model=GEMINI_MODEL,
-                contents=[arquivo_audio, PROMPT_TRANSCRICAO]
+                contents=[arquivo_audio, PROMPT_TRANSCRICAO],
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                ),
             )
             texto_bruto = resposta_transcricao.text
             print("[IA] Transcrição bruta concluída.", flush=True)
@@ -174,13 +215,16 @@ def gerar_nota_de_atendimento(caminho_do_audio: str) -> tuple[str, str]:
     for tentativa in range(1, GEMINI_MAX_TENTATIVAS + 1):
         try:
             print(f"[AGENTE] Tentativa {tentativa}/{GEMINI_MAX_TENTATIVAS}: gerando nota...", flush=True)
-            resposta = agente_suporte.run(
-                "Crie a nota de atendimento com base nesta transcrição. "
-                "Limpe vícios de linguagem e organize as ideias, mas não invente informações ausentes. "
-                f"Transcrição: {texto_bruto}"
+            resposta = cliente_google.models.generate_content(
+                model=GEMINI_TEXT_MODEL,
+                contents=PROMPT_NOTA_ATENDIMENTO.format(transcricao=texto_bruto),
+                config=types.GenerateContentConfig(
+                    temperature=0.2,
+                    max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
+                ),
             )
 
-            if _conteudo_indica_cota_gemini(resposta.content):
+            if _conteudo_indica_cota_gemini(resposta.text):
                 raise GeminiQuotaExceeded("Cota diária do Gemini esgotada. Aguarde a liberação da cota ou ajuste o plano/chave da API.")
 
             break
@@ -209,7 +253,7 @@ def gerar_nota_de_atendimento(caminho_do_audio: str) -> tuple[str, str]:
 
     print("[AGENTE] Nota técnica estruturada.", flush=True)
     
-    return texto_bruto, resposta.content
+    return texto_bruto, resposta.text
 
 
 def salvar_resultado_atendimento(atendente: str, pas: int, cod_atendimento: int, transcricao: str, nota: str) -> dict:
