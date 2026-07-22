@@ -1,3 +1,30 @@
+# Environments
+.venv/
+venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# Generated audio and atendimento outputs
+downloads/
+atendimentos/
+
+# Audio files
+*.mp3
+*.m4a
+*.wav
+*.ogg
+
+# Logs/temp
+*.log
+*.tmp
+secrets
 # Ignorar o ambiente virtual
 venv/
 __pycache__/

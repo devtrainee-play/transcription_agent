@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  apitranscription:
+    image: playlist.azurecr.io/agents/monitor:2026-07-22-1
+
+    networks:
+      - traefik-public
+
+    volumes:
+      - type: bind
+        source: /mnt/swarm/applications/apitranscription/downloads
+        target: /app/downloads
+
+      - type: bind
+        source: /mnt/swarm/applications/apitranscription/atendimentos
+        target: /app/atendimentos
+
+      - type: bind
+        source: /mnt/swarm/applications/apitranscription/secrets
+        target: /secrets
+
+    environment:
+      GOOGLE_API_KEY: AIzaSyBfRK1uGpgMzh5i0Dkh5F4Si1y5pYBSHp4
+      ASTERISK_HOST: 192.168.0.2
+      ASTERISK_PORT: 22
+      ASTERISK_USER: gravacoes
+      ASTERISK_PASSWORD: 3tKe9&Km
+      GEMINI_BACKEND: vertex
+      GEMINI_TEXT_MODEL: gemini-2.5-flash
+      GCP_PROJECT_ID: playlist-web-radio-runner
+      GCP_LOCATION: us-central1
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/agent-support.json
+
+    deploy:
+      replicas: 1
+
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+
+      restart_policy:
+        condition: any
+
+      placement:
+        constraints:
+          - node.hostname == cluster01
+
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.apitranscription.rule=Host(`transcription.playlistsoftware.com.br`)"
+        - "traefik.http.routers.apitranscription.entrypoints=websecure"
+        - "traefik.http.routers.apitranscription.tls=true"
+        - "traefik.http.routers.apitranscription.tls.certresolver=myresolver"
+        - "traefik.http.services.apitranscription.loadbalancer.server.port=8000"
+        - "traefik.swarm.network=traefik-public"
+
+networks:
+  traefik-public:
+    external: true
